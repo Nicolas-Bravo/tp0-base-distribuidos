@@ -179,3 +179,18 @@ Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/
 
 El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación.  Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
 Respetar el formato y contenido las entradas de logs descritas en los ejercicios, pues son las que se chequean en cada uno de los tests.
+
+## Resolucion
+
+### Ejercicio 1
+
+Para probar la solución del ejercicio 1 se debe usar el script `generar-compose.sh` desde la raíz del proyecto. El primer parámetro es el nombre del archivo de salida y el segundo la cantidad de clientes a crear.
+
+Ejemplo:
+
+```bash
+./generar-compose.sh docker-compose-dev.yaml 5
+make docker-compose-up
+```
+
+La implementación del script se hizo tomando como base el archivo `docker-compose-dev.yaml` original: se dejó fija la definición del servicio `server` y se agregó la generación automática de los servicios `client1`, `client2`, etc., reutilizando la misma configuración y cambiando únicamente el `CLI_ID` y el nombre de cada cliente.
