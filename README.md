@@ -211,3 +211,15 @@ Para probar distintas configuraciones alcanza con modificar `client/config.yaml`
 ./generar-compose.sh docker-compose-dev.yaml 1
 make docker-compose-up
 ```
+
+### Ejercicio 3
+
+Para el ejercicio 3 se agregó el script `validar-echo-server.sh` en la raíz del proyecto. La idea es validar el funcionamiento del echo server usando `netcat` desde un contenedor auxiliar, sin instalar nada en el host ni exponer puertos.
+
+Uso básico:
+
+```bash
+make docker-compose-up
+./validar-echo-server.sh
+```
+
