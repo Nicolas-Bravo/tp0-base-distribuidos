@@ -1,13 +1,27 @@
 import socket
 import logging
+import signal
+import threading
 
 
 class Server:
     def __init__(self, port, listen_backlog):
+        self._shutdown = threading.Event()
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        
+        signal.signal(signal.SIGTERM, self._handle_signal)
+        signal.signal(signal.SIGINT, self._handle_signal)
+
+    def _handle_signal(self, signum, frame):
+        logging.info(f'action: shutdown | result: in_progress | signal: {signum}')
+        self._shutdown.set()
+        try:
+            self._server_socket.close()
+        except OSError:
+            pass
 
     def run(self):
         """
@@ -18,11 +32,15 @@ class Server:
         finishes, servers starts to accept new connections again
         """
 
-        # TODO: Modify this program to handle signal to graceful shutdown
-        # the server
-        while True:
-            client_sock = self.__accept_new_connection()
+        while not self._shutdown.is_set():
+            try:
+                client_sock = self.__accept_new_connection()
+            except OSError:
+                # Socket cerrado durante el apagado
+                break
             self.__handle_client_connection(client_sock)
+
+        logging.info('action: shutdown | result: success')
 
     def __handle_client_connection(self, client_sock):
         """
@@ -41,6 +59,7 @@ class Server:
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
+            logging.info('action: close_client | result: success')
             client_sock.close()
 
     def __accept_new_connection(self):
