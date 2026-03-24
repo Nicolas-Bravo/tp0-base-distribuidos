@@ -2,6 +2,8 @@ import socket
 import logging
 import signal
 import threading
+from .utils import Bet, store_bets
+from .protocol import handle_bet_connection
 
 
 class Server:
@@ -42,24 +44,11 @@ class Server:
         logging.info('action: shutdown | result: success')
 
     def __handle_client_connection(self, client_sock):
-        """
-        Read message from a specific client socket and closes the socket
-
-        If a problem arises in the communication with the client, the
-        client socket will also be closed
-        """
+        """Delegar manejo de la conexión al módulo de protocolo."""
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
-        except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
-        finally:
-            logging.info('action: close_client | result: success')
-            client_sock.close()
+            handle_bet_connection(client_sock)
+        except Exception as e:
+            logging.error(f'action: receive_message | result: fail | error: {e}')
 
     def __accept_new_connection(self):
         """
