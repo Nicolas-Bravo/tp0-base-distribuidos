@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -euo pipefail
-
 MESSAGE="test-echo-$(date +%s)"
 NETWORK="tp0_testing_net"
 SERVER_SERVICE="server"
