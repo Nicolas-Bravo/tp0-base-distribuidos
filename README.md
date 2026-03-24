@@ -194,3 +194,20 @@ make docker-compose-up
 ```
 
 La implementación del script se hizo tomando como base el archivo `docker-compose-dev.yaml` original: se dejó fija la definición del servicio `server` y se agregó la generación automática de los servicios `client1`, `client2`, etc., reutilizando la misma configuración y cambiando únicamente el `CLI_ID` y el nombre de cada cliente.
+
+### Ejercicio 2
+
+Para el ejercicio 2 se cambió la forma en que cliente y servidor toman la configuración, para que los cambios se apliquen sin reconstruir las imágenes.
+
+Cambios principales:
+- `client/Dockerfile`: el archivo `config.yaml` ya no se copia en build.
+- `generar-compose.sh`: se montan los archivos de configuración del host como volúmenes:
+  - `./client/config.yaml` se monta en `/config.yaml` para cada cliente.
+  - `./server/config.ini` se monta en `/config.ini` para el servidor.
+
+Para probar distintas configuraciones alcanza con modificar `client/config.yaml` y `server/config.ini` y volver a levantar el entorno, por ejemplo:
+
+```bash
+./generar-compose.sh docker-compose-dev.yaml 1
+make docker-compose-up
+```
