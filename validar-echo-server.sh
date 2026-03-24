@@ -7,7 +7,7 @@ NETWORK="tp0_testing_net"
 SERVER_SERVICE="server"
 
 # Envío el mensaje desde un contenedor auxiliar con netcat
-RESPONSE=$(docker run --rm --network=${NETWORK} alpine /bin/sh -c "echo '$MSG' | nc ${SERVER_SERVICE} 12345")
+RESPONSE=$(docker run --rm --network=${NETWORK} alpine /bin/sh -c "echo '${MESSAGE}' | nc ${SERVER_SERVICE} 12345")
 
 if [ "${RESPONSE}" = "${MESSAGE}" ]; then
   echo "action: test_echo_server | result: success"
