@@ -40,7 +40,7 @@ func NewClient(config ClientConfig) *Client {
 	// Manejo básico de señales para terminar el loop de forma graceful
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
+		signal.Notify(c, syscall.SIGTERM)
 		<-c
 		log.Infof("action: shutdown | result: in_progress | client_id: %v", client.config.ID)
 		close(client.stopped)

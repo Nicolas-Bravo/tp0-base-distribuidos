@@ -223,3 +223,22 @@ make docker-compose-up
 ./validar-echo-server.sh
 ```
 
+### Ejercicio 4
+
+Para el ejercicio 4 se agregó un manejo de la signal SIGTERM tanto en el servidor como en el cliente, para que cierren sus recursos de forma ordenada.
+
+En el servidor (`server/common/server.py`) al capturar la señal SIGTERM se marca un flag de apagado, cierra el socket principal y, al salir del loop de aceptación, escribe un log de cierre.
+
+En el cliente (`client/common/client.go`) se captura SIGTERM y se corta el loop principal, cerrando la conexión abierta y dejando un mensaje de salida por log.
+
+Para ver el comportamiento se puede levantar el entorno y luego detenerlo con Docker:
+
+```bash
+./generar-compose.sh docker-compose-dev.yaml 1
+make docker-compose-up
+# En otra terminal
+docker compose -f docker-compose-dev.yaml stop -t 10
+```
+
+En los logs se puede observar cómo, al recibir la signal de Docker, el servidor deja de aceptar conexiones y cierra el socket, y los clientes terminan su ejecución sin dejar conexiones abiertas.
+

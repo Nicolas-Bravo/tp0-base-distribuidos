@@ -13,7 +13,6 @@ class Server:
         self._server_socket.listen(listen_backlog)
         
         signal.signal(signal.SIGTERM, self._handle_signal)
-        signal.signal(signal.SIGINT, self._handle_signal)
 
     def _handle_signal(self, signum, frame):
         logging.info(f'action: shutdown | result: in_progress | signal: {signum}')
