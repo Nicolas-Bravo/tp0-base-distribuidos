@@ -111,12 +111,33 @@ func (c *Client) StartClientLoop() {
 		c.conn.Close()
 		c.conn = nil
 
-		for _, b := range batch {
-			log.Infof("action: apuesta_enviada | result: success | dni: %s | numero: %s", b.DNI, b.Number)
-		}
+		log.Infof("action: apuesta_enviada | result: success | size: %d", len(batch))
 
 		time.Sleep(c.config.LoopPeriod)
 	}
 
+	if err := c.createClientSocket(); err != nil {
+		return
+	}
+	if err := SendEnd(c.conn, c.config.ID); err != nil {
+		log.Errorf("action: send_end | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+	c.conn.Close()
+	c.conn = nil
+
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+
+	if err := c.createClientSocket(); err != nil {
+		return
+	}
+	count, err := SendWinnersRequest(c.conn, c.config.ID)
+	if err != nil {
+		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+	c.conn.Close()
+	c.conn = nil
+
+	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", count)
 }

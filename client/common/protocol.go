@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strings"
 )
 
 // encodeBet serializa una apuesta en una sola línea de texto simple.
@@ -99,4 +100,27 @@ func sendBatch(conn net.Conn, bets []Bet) error {
 		return fmt.Errorf("unexpected batch ACK type: %q", typeStr)
 	}
 	return nil
+}
+
+func SendEnd(conn net.Conn, agencyID string) error {
+	return sendFrame(conn, "END", []byte(agencyID))
+}
+
+func SendWinnersRequest(conn net.Conn, agencyID string) (int, error) {
+	if err := sendFrame(conn, "WINNERS_REQ", []byte(agencyID)); err != nil {
+		return 0, err
+	}
+	msgType, payload, err := readFrame(conn)
+	if err != nil {
+		return 0, err
+	}
+	if msgType != "WINNERS_RESP" {
+		return 0, fmt.Errorf("unexpected response type: %s", msgType)
+	}
+	resp := string(payload)
+	if resp == "" {
+		return 0, nil
+	}
+	parts := strings.Split(resp, ",")
+	return len(parts), nil
 }
