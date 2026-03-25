@@ -70,7 +70,9 @@ def _handle_batch(payload, client_sock):
             raise ValueError("invalid bet format in batch")
         agency, first_name, last_name, document, birthdate, number = fields
         bets.append(Bet(agency, first_name, last_name, document, birthdate, number))
-        _active_agencies.add(agency)
+        _active_agencies.add(int(agency))
+
+    logging.debug(f"debug: handle_batch | active_agencies: {_active_agencies} | batch_size: {len(bets)}")
 
     store_bets(bets)
     logging.info(
@@ -84,35 +86,69 @@ def _handle_batch(payload, client_sock):
 # Si todas las agencias activas han enviado sus apuestas, se realiza el sorteo.
 def _handle_end(payload: bytes, sock):
     global _bets_cache
-    agency_id = payload.decode("utf-8").strip()
+    agency_id = int(payload.decode("utf-8").strip())
     _end_notifications.add(agency_id)
-    logging.info(f"action: fin_envio | result: success | agency: {agency_id} | total_agencias: {len(_end_notifications)}")
+    logging.info(
+        f"action: fin_envio | result: success | agency: {agency_id} | total_agencias: {len(_end_notifications)}"
+    )
+    logging.debug(
+        f"debug: end_received | active_agencies: {_active_agencies} | end_notifications: {_end_notifications} | bets_cache_is_none: {_bets_cache is None}"
+    )
+
     if _bets_cache is None and _active_agencies and _end_notifications.issuperset(_active_agencies):
-        # “sorteo”
         bets = list(load_bets())
         _bets_cache = bets
+        logging.debug(f"debug: sorteo_datos | total_bets: {len(_bets_cache)}")
         logging.info("action: sorteo | result: success")
+
     _send_frame(sock, "END_ACK", b"")
 
 
 # Procesa un mensaje de tipo WINNERS_REQ, que solicita los ganadores de una agencia específica.
-# Responde con los documentos de los ganadores separados por comas.
+# Responde según el siguiente protocolo:
+# - Si el sorteo aún no se realizó: WINNERS_RESP_WAIT (sin payload)
+# - Si hubo error: WINNERS_RESP_ERROR (sin payload)
+# - Si el sorteo ya se realizó:
+#     * Si hay ganadores: WINNERS_RESP|{cantidad}|{dni1,dni2,...}
+#     * Si no hay ganadores: WINNERS_RESP|0|
+
 def _handle_winners_req(payload: bytes, sock):
     global _bets_cache
     agency_id = int(payload.decode("utf-8").strip())
 
+    logging.debug(
+        f"debug: winners_req | agency_id: {agency_id} | bets_cache_is_none: {_bets_cache is None} | active_agencies: {_active_agencies} | end_notifications: {_end_notifications}"
+    )
+
+    # Sorteo aún no realizado
     if _bets_cache is None:
-        # Antes del sorteo no se pueden responder consultas
-        _send_frame(sock, "WINNERS_RESP", b"")
+        _send_frame(sock, "WINNERS_RESP_WAIT", b"")
         return
 
-    winners = []
-    for bet in _bets_cache:
-        if bet.agency == agency_id and has_won(bet):
-            winners.append(str(bet.document))
+    try:
+        winners = []
+        total_for_agency = 0
+        for bet in _bets_cache:
+            if bet.agency == agency_id:
+                total_for_agency += 1
+                if has_won(bet):
+                    winners.append(str(bet.document))
 
-    resp_payload = ",".join(winners).encode("utf-8")
-    _send_frame(sock, "WINNERS_RESP", resp_payload)
+        logging.debug(
+            f"debug: winners_calc | agency_id: {agency_id} | total_for_agency: {total_for_agency} | winners: {winners}"
+        )
+
+        count = len(winners)
+        if count > 0:
+            payload_str = ",".join(winners)
+            resp_payload = payload_str.encode("utf-8")
+            _send_frame(sock, f"WINNERS_RESP|{count}", resp_payload)
+        else:
+            # Sin ganadores para esta agencia, se indica cantidad 0 y payload vacío
+            _send_frame(sock, "WINNERS_RESP|0", b"")
+    except Exception as e:
+        logging.error(f"action: winners | result: fail | error: {e}")
+        _send_frame(sock, "WINNERS_RESP_ERROR", b"")
 
 
 # Manejo de mensajes de apuesta en batch
@@ -134,7 +170,7 @@ def handle_bet_connection(client_sock) -> None:
         # y se envía un BATCH_ACK con un payload de error simple.
         logging.error(f"action: apuesta_recibida | result: fail | error: {e}")
         try:
-            _send_frame(client_sock, "BATCH_ACK", b"ERR")
+            _send_frame(client_sock, "WINNERS_RESP_ERROR", b"")
         except Exception:
             pass
     finally:
