@@ -64,15 +64,13 @@ def _handle_batch(payload, client_sock):
     lines = [l for l in payload.decode("utf-8").split("\n") if l]
 
     bets = []
-    for idx, raw in enumerate(lines):
+    for raw in lines:
         fields = raw.split("|")
         if len(fields) != 6:
             raise ValueError("invalid bet format in batch")
         agency, first_name, last_name, document, birthdate, number = fields
         bets.append(Bet(agency, first_name, last_name, document, birthdate, number))
         _active_agencies.add(int(agency))
-
-    logging.debug(f"debug: handle_batch | active_agencies: {_active_agencies} | batch_size: {len(bets)}")
 
     store_bets(bets)
     logging.info(
@@ -91,14 +89,10 @@ def _handle_end(payload: bytes, sock):
     logging.info(
         f"action: fin_envio | result: success | agency: {agency_id} | total_agencias: {len(_end_notifications)}"
     )
-    logging.debug(
-        f"debug: end_received | active_agencies: {_active_agencies} | end_notifications: {_end_notifications} | bets_cache_is_none: {_bets_cache is None}"
-    )
 
     if _bets_cache is None and _active_agencies and _end_notifications.issuperset(_active_agencies):
         bets = list(load_bets())
         _bets_cache = bets
-        logging.debug(f"debug: sorteo_datos | total_bets: {len(_bets_cache)}")
         logging.info("action: sorteo | result: success")
 
     _send_frame(sock, "END_ACK", b"")
@@ -116,10 +110,6 @@ def _handle_winners_req(payload: bytes, sock):
     global _bets_cache
     agency_id = int(payload.decode("utf-8").strip())
 
-    logging.debug(
-        f"debug: winners_req | agency_id: {agency_id} | bets_cache_is_none: {_bets_cache is None} | active_agencies: {_active_agencies} | end_notifications: {_end_notifications}"
-    )
-
     # Sorteo aún no realizado
     if _bets_cache is None:
         _send_frame(sock, "WINNERS_RESP_WAIT", b"")
@@ -133,10 +123,6 @@ def _handle_winners_req(payload: bytes, sock):
                 total_for_agency += 1
                 if has_won(bet):
                     winners.append(str(bet.document))
-
-        logging.debug(
-            f"debug: winners_calc | agency_id: {agency_id} | total_for_agency: {total_for_agency} | winners: {winners}"
-        )
 
         count = len(winners)
         if count > 0:

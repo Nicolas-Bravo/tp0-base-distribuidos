@@ -290,6 +290,44 @@ En el ejercicio 6 se extendió la solución anterior para enviar varias apuestas
 
 De esta forma se reduce la cantidad de conexiones y se cumple con el envío y procesamiento por batches manteniendo la separación entre dominio y capa de comunicación.
 
+### Ejercicio 7 - Sorteo y consulta de ganadores
 
+Para resolver el ejercicio 7 se extendió el protocolo entre clientes y servidor para soportar:
+
+- Notificación de fin de envío de apuestas.
+- Sorteo global una vez que todas las agencias activas finalizaron.
+- Consulta robusta de ganadores con reintentos por parte del cliente.
+
+Se introdujeron nuevos tipos de mensajes para distinguir claramente los estados del sorteo y permitir reintentos seguros desde el cliente:
+
+- **Finalizacion de batch**
+
+  ```text
+  END|ID_AGENCIA
+  ```
+
+- **Petición de ganadores**
+
+  ```text
+  WINNERS_REQ|ID_AGENCIA
+  ```
+
+- **Respuesta: sorteo aún no realizado**
+
+  ```text
+  WINNERS_RESP_WAIT
+  ```
+
+- **Respuesta: error al procesar la consulta**
+
+  ```text
+  WINNERS_RESP_ERROR
+  ```
+
+- **Respuesta: sorteo realizado**
+
+    ```text
+    WINNERS_RESP|{cantidad}|{dni1,dni2,...}
+    ```
 
 

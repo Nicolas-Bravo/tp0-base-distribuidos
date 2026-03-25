@@ -32,7 +32,6 @@ func writeAll(conn net.Conn, data []byte) error {
 func sendFrame(conn net.Conn, msgType string, payload []byte) error {
 	header := fmt.Sprintf("%s|%d|", msgType, len(payload))
 	frame := append([]byte(header), payload...)
-	// Prefijo de longitud del frame completo
 	var lenPrefix [4]byte
 	binary.BigEndian.PutUint32(lenPrefix[:], uint32(len(frame)))
 	if err := writeAll(conn, lenPrefix[:]); err != nil {
@@ -55,7 +54,6 @@ func readFrame(conn net.Conn) (string, []byte, error) {
 		return "", nil, err
 	}
 
-	// buf = tipo|largo|payload o, para respuestas de sorteo con cantidad, tipo|cantidad|payload
 	sep1 := -1
 	sep2 := -1
 	for i, b := range buf {
@@ -73,28 +71,23 @@ func readFrame(conn net.Conn) (string, []byte, error) {
 	}
 
 	typeStr := string(buf[:sep1])
-	// Para la mayoría de los mensajes mantenemos el contrato original tipo|largo|payload.
 	// Para WINNERS_RESP usamos tipo|cantidad|payload.
 	if typeStr == "WINNERS_RESP" {
 		if sep2 == -1 {
-			// No hay payload, pero se espera al menos tipo|cantidad|
 			return typeStr, nil, fmt.Errorf("invalid WINNERS_RESP frame: missing count separator")
 		}
-		// Devolvemos el resto (count|payload) para que lo procese SendWinnersRequest.
 		return typeStr, buf[sep1+1:], nil
 	}
 
 	if sep2 == -1 {
 		return "", nil, fmt.Errorf("invalid frame format")
 	}
-	// lengthStr := string(buf[sep1+1 : sep2]) // se puede validar si se quiere
 	payload := buf[sep2+1:]
 	return typeStr, payload, nil
 }
 
 // sendBatch envía todas las apuestas de un batch en un solo mensaje tipo BATCH y espera un ACK tipo BATCH_ACK.
 func sendBatch(conn net.Conn, bets []Bet) error {
-	// payload del batch: una apuesta por línea
 	builder := make([]byte, 0)
 	for idx, b := range bets {
 		line := encodeBet(b)
@@ -124,7 +117,7 @@ func SendEnd(conn net.Conn, agencyID string) error {
 }
 
 // SendWinnersRequest consulta la cantidad de ganadores para una agencia.
-// Nuevo protocolo del servidor:
+// Protocolo del servidor:
 // - Si el sorteo aún no se realizó: WINNERS_RESP_WAIT (sin payload) => retry = false
 // - Si hubo error: WINNERS_RESP_ERROR (sin payload) => error
 // - Si el sorteo ya se realizó:
@@ -143,30 +136,25 @@ func SendWinnersRequest(conn net.Conn, agencyID string) (int, bool, error) {
 
 	switch msgType {
 	case "WINNERS_RESP_WAIT":
-		// Sorteo aún no realizado, el cliente debería reintentar luego de dormir.
 		return 0, false, nil
 	case "WINNERS_RESP_ERROR":
 		return 0, true, fmt.Errorf("server reported error on winners request")
 	case "WINNERS_RESP":
-		// rest tiene el formato "{cantidad}|{payload}" donde {payload} puede ser vacío.
 		parts := strings.SplitN(string(rest), "|", 3)
 		if len(parts) < 2 {
 			return 0, true, fmt.Errorf("invalid WINNERS_RESP frame")
 		}
-		countStr := parts[1]
-		count, err := strconv.Atoi(countStr)
+		count, err := strconv.Atoi(parts[1])
 		if err != nil {
 			return 0, true, fmt.Errorf("invalid winners count: %v", err)
 		}
 		if count == 0 {
-			// No hay ganadores para esta agencia, respuesta definitiva.
 			return 0, true, nil
 		}
 		if len(parts) < 3 || parts[2] == "" {
 			return 0, true, fmt.Errorf("winners payload missing with non-zero count")
 		}
 		dnis := strings.Split(parts[2], ",")
-		// Por contrato, len(dnis) debería coincidir con count, pero usamos len(dnis) como fuente de verdad.
 		return len(dnis), true, nil
 	default:
 		return 0, false, fmt.Errorf("unexpected response type: %s", msgType)
