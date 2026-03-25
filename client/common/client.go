@@ -70,15 +70,17 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop ahora envía apuestas en batches leídas desde el CSV de la agencia.
 func (c *Client) StartClientLoop() {
-	// Ruta del archivo de la agencia, por convención .data/agency-{ID}.csv
 	csvPath := filepath.Join("/data", "agency-"+c.config.ID+".csv")
 	bets, err := LoadBetsFromCSV(csvPath, c.config.ID)
 	if err != nil {
 		log.Criticalf("action: load_bets | result: fail | client_id: %v | error: %v", c.config.ID, err)
 		return
 	}
+	log.Debugf("action: load_bets | result: success | client_id: %v | total: %d", c.config.ID, len(bets))
 
 	batchSize := c.config.BatchMax
+	log.Debugf("action: config_batch | client_id: %v | batch_max: %d", c.config.ID, batchSize)
+
 	for offset := 0; offset < len(bets); offset += batchSize {
 		select {
 		case <-c.stopped:
@@ -93,13 +95,14 @@ func (c *Client) StartClientLoop() {
 		}
 		batch := bets[offset:end]
 
+		log.Debugf("action: batch_loop | client_id: %v | offset: %d | end: %d | size: %d", c.config.ID, offset, end, len(batch))
+
 		if err := c.createClientSocket(); err != nil {
 			return
 		}
 
 		if err := sendBatch(c.conn, batch); err != nil {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-				c.config.ID, err)
+			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
 			c.conn.Close()
 			c.conn = nil
 			return
