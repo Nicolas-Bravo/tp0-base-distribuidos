@@ -272,4 +272,24 @@ Del lado del servidor (`server/common`):
 
 - Finalmente el servidor responde por el mismo socket con `OK\n`, que es lo que el cliente interpreta como confirmación de la apuesta.
 
+### Ejercicio 6
+
+En el ejercicio 6 se extendió la solución anterior para enviar varias apuestas a la vez (batch) desde cada cliente.
+
+- Para cada cliente se monta el archivo `.data/agency-{ID}.csv` dentro del contenedor como `/data/agency-{ID}.csv`.
+- El cliente lee todas las apuestas de su archivo y las agrupa en batches de tamaño configurable mediante `batch.maxAmount` en `client/config.yaml`. 
+- Cada batch se envía al servidor reutilizando el módulo de comunicación, de modo que todas las apuestas del lote viajan juntas y el servidor responde con una única confirmación para el batch.
+- Los mensajes ahora siguen el formato `{tipo}|{tamaño}|{mensaje}`. De esta forma, el receptor sabe de antemano cuántos bytes debe leer para reconstruir cada mensaje completo.
+- Del lado del servidor, las líneas recibidas se deserializan a estructuras `Bet` y se almacenan con `store_bets(...)`. Si el lote se procesa correctamente se loguea:
+
+  ```text
+  action: apuesta_recibida | result: success | cantidad: {CANTIDAD_DE_APUESTAS}
+  ```
+
+- Del lado del cliente, solo cuando el batch fue confirmado se consideran enviadas las apuestas y se imprimen los logs `apuesta_enviada` correspondientes.
+
+De esta forma se reduce la cantidad de conexiones y se cumple con el envío y procesamiento por batches manteniendo la separación entre dominio y capa de comunicación.
+
+
+
 
