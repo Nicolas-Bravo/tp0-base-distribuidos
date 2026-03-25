@@ -5,6 +5,7 @@ from .utils import Bet, store_bets, load_bets, has_won
 
 _end_notifications = set()
 _bets_cache = None
+_active_agencies = set()
 
 
 # Lee exactamente 'length' bytes del socket o lanza una excepción si la conexión se cierra antes.
@@ -69,24 +70,24 @@ def _handle_batch(payload, client_sock):
             raise ValueError("invalid bet format in batch")
         agency, first_name, last_name, document, birthdate, number = fields
         bets.append(Bet(agency, first_name, last_name, document, birthdate, number))
+        _active_agencies.add(agency)
 
     store_bets(bets)
     logging.info(
         f"action: apuesta_recibida | result: success | cantidad: {len(bets)}"
     )
 
-    # Confirmar recepción correcta del batch
     _send_frame(client_sock, "BATCH_ACK", b"")
 
 
 # Procesa un mensaje de tipo END, que indica el fin de envío de apuestas por parte de una agencia.
-# Si todas las agencias han enviado sus apuestas, se realiza el sorteo.
+# Si todas las agencias activas han enviado sus apuestas, se realiza el sorteo.
 def _handle_end(payload: bytes, sock):
     global _bets_cache
     agency_id = payload.decode("utf-8").strip()
     _end_notifications.add(agency_id)
     logging.info(f"action: fin_envio | result: success | agency: {agency_id} | total_agencias: {len(_end_notifications)}")
-    if len(_end_notifications) == 5 and _bets_cache is None:
+    if _bets_cache is None and _active_agencies and _end_notifications.issuperset(_active_agencies):
         # “sorteo”
         bets = list(load_bets())
         _bets_cache = bets
