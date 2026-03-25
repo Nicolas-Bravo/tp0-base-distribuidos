@@ -116,28 +116,41 @@ func (c *Client) StartClientLoop() {
 		time.Sleep(c.config.LoopPeriod)
 	}
 
+	// Notificar fin de envíos al servidor
 	if err := c.createClientSocket(); err != nil {
 		return
 	}
 	if err := SendEnd(c.conn, c.config.ID); err != nil {
 		log.Errorf("action: send_end | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		c.conn.Close()
+		c.conn = nil
 		return
 	}
 	c.conn.Close()
 	c.conn = nil
+
+	// Consultar ganadores con reintentos hasta que el servidor tenga el sorteo listo
+	for {
+		if err := c.createClientSocket(); err != nil {
+			return
+		}
+		count, done, err := SendWinnersRequest(c.conn, c.config.ID)
+		c.conn.Close()
+		c.conn = nil
+
+		if err != nil {
+			log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			return
+		}
+		if !done {
+			// El servidor aún no realizó el sorteo; esperamos un poco y reintentamos
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", count)
+		break
+	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
-
-	if err := c.createClientSocket(); err != nil {
-		return
-	}
-	count, err := SendWinnersRequest(c.conn, c.config.ID)
-	if err != nil {
-		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", c.config.ID, err)
-		return
-	}
-	c.conn.Close()
-	c.conn = nil
-
-	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", count)
 }

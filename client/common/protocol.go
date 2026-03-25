@@ -102,25 +102,39 @@ func sendBatch(conn net.Conn, bets []Bet) error {
 	return nil
 }
 
+// SendEnd notifica al servidor que una agencia terminó de enviar sus apuestas.
 func SendEnd(conn net.Conn, agencyID string) error {
 	return sendFrame(conn, "END", []byte(agencyID))
 }
 
-func SendWinnersRequest(conn net.Conn, agencyID string) (int, error) {
+// SendWinnersRequest consulta la cantidad de ganadores para una agencia.
+// Si el servidor aún no realizó el sorteo, se puede recibir una respuesta vacía.
+// En ese caso, el cliente interpretará que todavía no hay datos y podrá reintentar.
+func SendWinnersRequest(conn net.Conn, agencyID string) (int, bool, error) {
 	if err := sendFrame(conn, "WINNERS_REQ", []byte(agencyID)); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	msgType, payload, err := readFrame(conn)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if msgType != "WINNERS_RESP" {
-		return 0, fmt.Errorf("unexpected response type: %s", msgType)
+		return 0, false, fmt.Errorf("unexpected response type: %s", msgType)
 	}
+
+	// Payload vacío: el servidor aún no puede responder (sorteo no realizado)
+	if len(payload) == 0 {
+		return 0, false, nil
+	}
+
 	resp := string(payload)
-	if resp == "" {
-		return 0, nil
+	if resp == "ERR" {
+		return 0, true, fmt.Errorf("server reported error on winners request")
 	}
+
 	parts := strings.Split(resp, ",")
-	return len(parts), nil
+	if len(parts) == 1 && parts[0] == "" {
+		return 0, true, nil
+	}
+	return len(parts), true, nil
 }
