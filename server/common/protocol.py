@@ -31,21 +31,46 @@ def _send_all(sock, data: bytes) -> None:
 # Recibe una apuesta, la almacena y responde un ACK simple
 def handle_bet_connection(client_sock) -> None:
     try:
-        raw = _recv_line(client_sock)
-        parts = raw.split("|")
-        if len(parts) != 6:
-            raise ValueError("invalid bet format")
+        header = _recv_line(client_sock)
+        parts = header.split("|")
+        if len(parts) != 2 or parts[0] != "BATCH":
+            raise ValueError("invalid batch header")
+        try:
+            count = int(parts[1])
+        except ValueError:
+            raise ValueError("invalid batch size")
 
-        agency, first_name, last_name, document, birthdate, number = parts
+        bets = []
+        for _ in range(count):
+            raw = _recv_line(client_sock)
+            fields = raw.split("|")
+            if len(fields) != 6:
+                raise ValueError("invalid bet format in batch")
 
-        bet = Bet(agency, first_name, last_name, document, birthdate, number)
-        store_bets([bet])
+            agency, first_name, last_name, document, birthdate, number = fields
+            bets.append(Bet(agency, first_name, last_name, document, birthdate, number))
 
+        store_bets(bets)
+
+        # log con cantidad de apuestas del batch
         logging.info(
-            f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}"
+            f"action: apuesta_recibida | result: success | cantidad: {len(bets)}"
         )
 
         _send_all(client_sock, b"OK\n")
+
+        # logs individuales de apuesta_almacenada
+        # for bet in bets:
+        #    logging.info(
+        #        f"action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}"
+        #    )
+
+    except Exception as e:
+        logging.error(f"action: apuesta_recibida | result: fail | error: {e}")
+        try:
+            _send_all(client_sock, b"ERR\n")
+        except Exception:
+            pass
     finally:
         logging.info("action: close_client | result: success")
         client_sock.close()

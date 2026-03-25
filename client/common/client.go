@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -18,6 +19,7 @@ type ClientConfig struct {
 	ServerAddress string
 	LoopAmount    int
 	LoopPeriod    time.Duration
+	BatchMax      int
 }
 
 // Client Entity that encapsulates how
@@ -66,11 +68,18 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-// StartClientLoop ahora usa el dominio y protocolo del ejercicio 5
+// StartClientLoop ahora envía apuestas en batches leídas desde el CSV de la agencia.
 func (c *Client) StartClientLoop() {
-	bet := NewBetFromEnv(c.config.ID)
+	// Ruta del archivo de la agencia, por convención .data/agency-{ID}.csv
+	csvPath := filepath.Join("/data", "agency-"+c.config.ID+".csv")
+	bets, err := LoadBetsFromCSV(csvPath, c.config.ID)
+	if err != nil {
+		log.Criticalf("action: load_bets | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
 
-	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
+	batchSize := c.config.BatchMax
+	for offset := 0; offset < len(bets); offset += batchSize {
 		select {
 		case <-c.stopped:
 			log.Infof("action: exit | result: success | client_id: %v", c.config.ID)
@@ -78,11 +87,17 @@ func (c *Client) StartClientLoop() {
 		default:
 		}
 
+		end := offset + batchSize
+		if end > len(bets) {
+			end = len(bets)
+		}
+		batch := bets[offset:end]
+
 		if err := c.createClientSocket(); err != nil {
 			return
 		}
 
-		if err := sendBetAndWaitAck(c.conn, bet); err != nil {
+		if err := sendBatch(c.conn, batch); err != nil {
 			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
 				c.config.ID, err)
 			c.conn.Close()
@@ -93,7 +108,9 @@ func (c *Client) StartClientLoop() {
 		c.conn.Close()
 		c.conn = nil
 
-		log.Infof("action: apuesta_enviada | result: success | dni: %s | numero: %s", bet.DNI, bet.Number)
+		for _, b := range batch {
+			log.Infof("action: apuesta_enviada | result: success | dni: %s | numero: %s", b.DNI, b.Number)
+		}
 
 		time.Sleep(c.config.LoopPeriod)
 	}
