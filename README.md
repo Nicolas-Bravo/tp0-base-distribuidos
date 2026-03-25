@@ -242,3 +242,34 @@ docker compose -f docker-compose-dev.yaml stop -t 10
 
 En los logs se puede observar cómo, al recibir la signal de Docker, el servidor deja de aceptar conexiones y cierra el socket, y los clientes terminan su ejecución sin dejar conexiones abiertas.
 
+### Ejercicio 5
+
+Para el ejercicio 5 se cambió el intercambio entre cliente y servidor para modelar la apuesta de una agencia de quiniela.
+
+Del lado del cliente (`client/common`):
+- Se definió una estructura de dominio `Bet` con los campos de la apuesta (agencia, nombre, apellido, DNI, fecha de nacimiento y número).
+- La apuesta se arma a partir de variables de entorno (`NOMBRE`, `APELLIDO`, `DOCUMENTO`, `NACIMIENTO`, `NUMERO`) y del `CLI_ID`, que se usa como identificador de agencia.
+- Se implementó un módulo de protocolo que serializa la apuesta en una línea de texto con el siguiente formato fijo:
+
+  ```text
+  agencia|nombre|apellido|dni|nacimiento|numero\n
+  ```
+
+- Para cada envío el cliente abre un socket, manda la línea completa y espera un ACK exacto `OK\n`. Sólo si recibe ese ACK se loguea:
+
+  ```text
+  action: apuesta_enviada | result: success | dni: {DNI} | numero: {NUMERO}
+  ```
+
+Del lado del servidor (`server/common`):
+- Se reutiliza la clase `Bet` y la función `store_bets(...)` provistas por la cátedra.
+- Un módulo de protocolo se encarga de leer la línea completa desde el socket, parsearla en sus 6 campos y construir la apuesta de dominio.
+- La apuesta se persiste con `store_bets(...)` y se escribe el log:
+
+  ```text
+  action: apuesta_almacenada | result: success | dni: {DNI} | numero: {NUMERO}
+  ```
+
+- Finalmente el servidor responde por el mismo socket con `OK\n`, que es lo que el cliente interpreta como confirmación de la apuesta.
+
+
