@@ -112,8 +112,23 @@ func sendBatch(conn net.Conn, bets []Bet) error {
 }
 
 // SendEnd notifica al servidor que una agencia terminó de enviar sus apuestas.
+// SendEnd notifica al servidor que una agencia terminó de enviar sus apuestas y espera el ACK.
 func SendEnd(conn net.Conn, agencyID string) error {
-	return sendFrame(conn, "END", []byte(agencyID))
+	if err := sendFrame(conn, "END", []byte(agencyID)); err != nil {
+		return err
+	}
+
+	// Consumir el END_ACK para mantener la sincronización de la conexión
+	msgType, _, err := readFrame(conn)
+	if err != nil {
+		return err
+	}
+
+	if msgType != "END_ACK" {
+		return fmt.Errorf("unexpected end ACK type: %q", msgType)
+	}
+
+	return nil
 }
 
 // SendWinnersRequest consulta la cantidad de ganadores para una agencia.
