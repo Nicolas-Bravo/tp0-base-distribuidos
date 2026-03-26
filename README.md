@@ -331,3 +331,15 @@ Se introdujeron nuevos tipos de mensajes para distinguir claramente los estados 
     ```
 
 
+### Ejercicio 8 - Concurrencia y conexiones persistentes
+
+Para el ejercicio 8, se optimizó el uso de red y se implementó el procesamiento concurrente en el servidor, adaptando el sistema para soportar el ciclo de vida completo de múltiples clientes en paralelo.
+
+**Servidor (Concurrencia y Sincronización):**
+- Se modificó el bucle de aceptación en `server.py` para que, por cada nueva conexión entrante, se despache un hilo independiente (`threading.Thread`). Esto permite que múltiples agencias interactúen con el servidor en simultáneo.
+- Dado que los distintos hilos acceden a variables globales compartidas (como el registro de agencias activas `_active_agencies`, las notificaciones de finalización `_end_notifications` y la caché del sorteo `_bets_cache`), se introdujo un mecanismo de sincronización mediante `threading.Lock()`. Esto protege las secciones críticas, previniendo *race conditions* y asegurando la consistencia del estado global.
+- Se adaptó el módulo de protocolo (`protocol.py`) para mantener la conexión viva. En lugar de procesar un solo mensaje y desconectar, ahora utiliza un ciclo continuo (`while True`) para procesar todos los mensajes de un mismo cliente hasta detectar un cierre ordenado de la conexión (`EOFError`).
+
+**Cliente (Conexiones persistentes):**
+- Se refactorizó el ciclo de vida del cliente (`client.go`) para que establezca el socket de conexión (`net.Dial`) una única vez al inicializar su ciclo de trabajo.
+- Esta misma conexión TCP se reutiliza para transmitir secuencialmente todos los *batches* de apuestas, enviar la notificación de fin (`END`) y realizar los reintentos de consulta de ganadores (`WINNERS_REQ`).
