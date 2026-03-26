@@ -2,7 +2,6 @@ import socket
 import logging
 import signal
 import threading
-from .utils import Bet, store_bets
 from .protocol import handle_bet_connection
 
 
@@ -13,6 +12,9 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        
+        # Lista para mantener el control de los hilos de los clientes
+        self._client_threads = []
         
         signal.signal(signal.SIGTERM, self._handle_signal)
 
@@ -26,11 +28,10 @@ class Server:
 
     def run(self):
         """
-        Dummy Server loop
+        Server loop
 
         Server that accept a new connections and establishes a
-        communication with a client. After client with communucation
-        finishes, servers starts to accept new connections again
+        communication with a client using multithreading.
         """
 
         while not self._shutdown.is_set():
@@ -39,7 +40,21 @@ class Server:
             except OSError:
                 # Socket cerrado durante el apagado
                 break
-            self.__handle_client_connection(client_sock)
+            
+            # Limpiar hilos muertos periódicamente para no acumular referencias
+            self._client_threads = [t for t in self._client_threads if t.is_alive()]
+
+            # Lanzar un nuevo hilo para manejar la conexión del cliente
+            client_thread = threading.Thread(
+                target=self.__handle_client_connection,
+                args=(client_sock,)
+            )
+            client_thread.start()
+            self._client_threads.append(client_thread)
+
+        # Esperar a que todos los hilos en curso finalicen antes de apagar completamente
+        for t in self._client_threads:
+            t.join()
 
         logging.info('action: shutdown | result: success')
 

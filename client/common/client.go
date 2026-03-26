@@ -53,8 +53,7 @@ func NewClient(config ClientConfig) *Client {
 }
 
 // CreateClientSocket Initializes client socket. In case of
-// failure, error is printed in stdout/stderr and exit 1
-// is returned
+// failure, error is printed in stdout/stderr and returns the error
 func (c *Client) createClientSocket() error {
 	conn, err := net.Dial("tcp", c.config.ServerAddress)
 	if err != nil {
@@ -63,12 +62,14 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
 	return nil
 }
 
-// StartClientLoop ahora envía apuestas en batches leídas desde el CSV de la agencia.
+// StartClientLoop ahora envía apuestas en batches leídas desde el CSV de la agencia
+// reutilizando una única conexión TCP durante todo el proceso.
 func (c *Client) StartClientLoop() {
 	csvPath := filepath.Join("/data", "agency-"+c.config.ID+".csv")
 	bets, err := LoadBetsFromCSV(csvPath, c.config.ID)
@@ -80,6 +81,18 @@ func (c *Client) StartClientLoop() {
 
 	batchSize := c.config.BatchMax
 	log.Debugf("action: config_batch | client_id: %v | batch_max: %d", c.config.ID, batchSize)
+
+	// 1. Abrimos la conexión una única vez al principio
+	if err := c.createClientSocket(); err != nil {
+		return
+	}
+	// 2. Nos aseguramos de cerrar la conexión siempre al salir de la función
+	defer func() {
+		if c.conn != nil {
+			c.conn.Close()
+			c.conn = nil
+		}
+	}()
 
 	for offset := 0; offset < len(bets); offset += batchSize {
 		select {
@@ -97,47 +110,26 @@ func (c *Client) StartClientLoop() {
 
 		log.Debugf("action: batch_loop | client_id: %v | offset: %d | end: %d | size: %d", c.config.ID, offset, end, len(batch))
 
-		if err := c.createClientSocket(); err != nil {
-			return
-		}
-
+		// Enviamos el lote por la conexión ya establecida
 		if err := sendBatch(c.conn, batch); err != nil {
 			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			c.conn.Close()
-			c.conn = nil
 			return
 		}
-
-		c.conn.Close()
-		c.conn = nil
 
 		log.Infof("action: apuesta_enviada | result: success | size: %d", len(batch))
 
 		time.Sleep(c.config.LoopPeriod)
 	}
 
-	// Notificar fin de envíos al servidor
-	if err := c.createClientSocket(); err != nil {
-		return
-	}
+	// Notificar fin de envíos al servidor por la misma conexión
 	if err := SendEnd(c.conn, c.config.ID); err != nil {
 		log.Errorf("action: send_end | result: fail | client_id: %v | error: %v", c.config.ID, err)
-		c.conn.Close()
-		c.conn = nil
 		return
 	}
-	c.conn.Close()
-	c.conn = nil
 
 	// Consultar ganadores con reintentos hasta que el servidor tenga el sorteo listo
 	for {
-		if err := c.createClientSocket(); err != nil {
-			return
-		}
 		count, done, err := SendWinnersRequest(c.conn, c.config.ID)
-		c.conn.Close()
-		c.conn = nil
-
 		if err != nil {
 			log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", c.config.ID, err)
 			return
